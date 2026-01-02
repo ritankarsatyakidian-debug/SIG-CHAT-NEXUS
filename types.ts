@@ -1,3 +1,4 @@
+
 export enum SigmaxCountry {
   POWERLINGX = 'POWERLINGX',
   TAIQ = 'TAIQ',
@@ -46,6 +47,7 @@ export interface Chat {
   description?: string;
   lastMessage?: Message;
   unreadCount?: number;
+  unreadBy?: string[]; // List of user IDs who have marked this as unread
   restrictedTo?: string[]; // List of specific identities allowed
 }
 

@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { Message, SmartSuggestion, AnalysisResult } from '../types';
 
@@ -158,6 +159,7 @@ export const verifyUserIdentity = async (imageBase64: string): Promise<{ identif
             3. "SATYAKI HALDER": Young boy, short hair, looking calm, wearing a purple or dark shirt, neutral expression.
             4. "DIAN DEY": Young boy, wearing dark/black framed glasses, short hair, smiling, possibly wearing a striped shirt.
             5. "IBHAN CHAKRABORTY": Young boy, short dark hair, wearing a bluish/teal shirt, talking on a yellow phone or hand near face.
+            6. "SAANVI ROY": Young person/girl, dark shoulder-length hair, wearing a purple/dark patterned top, smiling or talking expression, looking slightly to the side or at camera.
 
             If the image strongly matches one of these descriptions, return the EXACT name from the list. 
             If it does not match anyone clearly, return "UNKNOWN".

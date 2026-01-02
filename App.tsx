@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { User, Chat, Message, SigmaxCountry, AnalysisResult, SmartSuggestion } from './types';
 import { COUNTRY_THEMES, INITIAL_CONTACTS } from './constants';
@@ -46,7 +47,9 @@ interface ChatItemProps {
   chat: Chat;
   isActive: boolean;
   onClick: () => void;
+  onContextMenu: (e: React.MouseEvent, chatId: string) => void;
   otherUser?: User; // For private chats
+  isUnread: boolean;
 }
 
 interface MessageBubbleProps {
@@ -265,6 +268,9 @@ const CreditCardIconWrapper = ({className}: {className?: string}) => (
     <path d="M2.25 6a.75.75 0 0 1 .75-.75h18a.75.75 0 0 1 .75.75v.75H2.25V6Z" />
   </svg>
 );
+
+// ... (MeetingRoom, TerminalWindow, VerificationFlow, AuthScreen remain unchanged for brevity, but are part of the file)
+// Re-inserting required components for full file structure context if needed, but assuming partial update for changed components
 
 const MeetingRoom = ({ user, onClose }: { user: User, onClose: () => void }) => {
   const [messages, setMessages] = useState<{sender: string, text: string, time: string}[]>([]);
@@ -804,6 +810,7 @@ const VerificationFlow = ({ user, onComplete }: { user: User, onComplete: (u: Us
   );
 };
 
+// ... (AuthScreen, MessageBubble are reused)
 const AuthScreen = ({ onLogin }: { onLogin: (user: User) => void }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [formData, setFormData] = useState({
@@ -1040,6 +1047,7 @@ export default function App() {
   const [manageAddPhone, setManageAddPhone] = useState(''); // New input for adding member
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false); // Mobile sidebar toggle
   const [showInfoPanel, setShowInfoPanel] = useState(false); // Mobile info panel toggle
+  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, chatId: string } | null>(null);
   
   // Terminal State
   const [showTerminal, setShowTerminal] = useState(false);
@@ -1102,11 +1110,15 @@ export default function App() {
 
   // --- Load Messages when Chat Changes ---
   useEffect(() => {
-    if (activeChatId) {
+    if (activeChatId && user) {
       setActiveMessages(Persistence.getMessages(activeChatId));
       if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
       setSmartSuggestions([]);
       setAnalysis(null);
+      
+      // Auto-mark as read when opening chat
+      Persistence.toggleChatReadStatus(activeChatId, user.id, false);
+      
       // Close sidebar on mobile when chat selected
       setMobileMenuOpen(false);
     }
@@ -1137,6 +1149,25 @@ export default function App() {
     Persistence.logout();
     setUser(null);
     setActiveChatId(null);
+  };
+
+  const handleContextMenu = (e: React.MouseEvent, chatId: string) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, chatId });
+  };
+
+  const closeContextMenu = () => setContextMenu(null);
+
+  const handleToggleReadStatus = () => {
+    if (!contextMenu || !user) return;
+    const chat = chats.find(c => c.id === contextMenu.chatId);
+    if (chat) {
+       const isCurrentlyUnread = chat.unreadBy?.includes(user.id);
+       Persistence.toggleChatReadStatus(chat.id, user.id, !isCurrentlyUnread);
+       // Refresh local state immediately for responsiveness
+       setChats(Persistence.getUserChats(user.id));
+    }
+    closeContextMenu();
   };
 
   const handleSendMessage = async (text: string, priority: 'NORMAL' | 'HIGH' | 'CRITICAL' = 'NORMAL') => {
@@ -1301,7 +1332,7 @@ export default function App() {
     setIsAnalyzing(false);
   };
 
-  const ChatItem: React.FC<ChatItemProps> = ({ chat, isActive, onClick, otherUser }) => {
+  const ChatItem: React.FC<ChatItemProps> = ({ chat, isActive, onClick, onContextMenu, otherUser, isUnread }) => {
     let name = chat.name;
     let avatar = chat.avatar;
     let status = null;
@@ -1319,8 +1350,9 @@ export default function App() {
     return (
       <div 
         onClick={onClick}
+        onContextMenu={(e) => onContextMenu(e, chat.id)}
         className={`p-3 flex items-center space-x-3 cursor-pointer transition-all duration-200 border-l-4 
-        ${isActive ? `bg-slate-800/80 border-cyan-500` : 'bg-transparent border-transparent hover:bg-slate-800/50'}`}
+        ${isActive ? `bg-slate-800/80 border-cyan-500` : 'bg-transparent border-transparent hover:bg-slate-800/50'} relative`}
       >
         <div className="relative">
           <img src={avatar} alt={name} className="w-10 h-10 rounded-full bg-slate-700 object-cover" />
@@ -1331,18 +1363,25 @@ export default function App() {
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex justify-between items-baseline">
-            <h3 className={`font-medium truncate text-sm ${isActive ? 'text-white' : 'text-slate-300'}`}>{name}</h3>
+            <h3 className={`font-medium truncate text-sm ${isActive ? 'text-white' : 'text-slate-300'} ${isUnread ? 'font-bold text-white' : ''}`}>
+              {name}
+            </h3>
             {chat.lastMessage && (
                <span className="text-[10px] text-slate-600">{new Date(chat.lastMessage.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
             )}
           </div>
           <div className="flex justify-between items-center">
-            <p className="text-xs text-slate-500 truncate max-w-[140px]">
+            <p className={`text-xs truncate max-w-[140px] ${isUnread ? 'text-white font-semibold' : 'text-slate-500'}`}>
               {chat.lastMessage ? chat.lastMessage.text : (chat.description || 'No messages yet')}
             </p>
             {theme && <span className="text-xs opacity-50">{theme.icon}</span>}
           </div>
         </div>
+        
+        {/* Unread Indicator */}
+        {isUnread && (
+          <div className="absolute right-2 top-1/2 transform -translate-y-1/2 w-3 h-3 rounded-full bg-cyan-500 shadow-[0_0_10px_#06b6d4]"></div>
+        )}
       </div>
     );
   };
@@ -1385,7 +1424,7 @@ export default function App() {
   const visibleMessages = activeMessages.filter(msg => !user.blockedUserIds?.includes(msg.senderId));
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-slate-900 via-[#0f172a] to-black">
+    <div className="flex h-screen w-screen overflow-hidden bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-slate-900 via-[#0f172a] to-black" onClick={closeContextMenu}>
       
       {/* Mobile Backdrop */}
       {mobileMenuOpen && (
@@ -1427,7 +1466,14 @@ export default function App() {
              <HashtagIcon className="w-3 h-3 mr-1" /> Channels
           </div>
           {chats.filter(c => c.type === 'channel').map(chat => (
-            <ChatItem key={chat.id} chat={chat} isActive={activeChatId === chat.id} onClick={() => setActiveChatId(chat.id)} />
+            <ChatItem 
+              key={chat.id} 
+              chat={chat} 
+              isActive={activeChatId === chat.id} 
+              onClick={() => setActiveChatId(chat.id)}
+              onContextMenu={handleContextMenu}
+              isUnread={chat.unreadBy?.includes(user.id) || false}
+            />
           ))}
 
           {/* Messages Section */}
@@ -1442,7 +1488,9 @@ export default function App() {
                 chat={chat} 
                 otherUser={otherId ? userMap[otherId] : undefined}
                 isActive={activeChatId === chat.id} 
-                onClick={() => setActiveChatId(chat.id)} 
+                onClick={() => setActiveChatId(chat.id)}
+                onContextMenu={handleContextMenu}
+                isUnread={chat.unreadBy?.includes(user.id) || false}
                />
              );
           })}
@@ -1457,11 +1505,25 @@ export default function App() {
         </div>
       </div>
 
+      {/* Context Menu */}
+      {contextMenu && (
+        <div 
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          className="fixed z-50 bg-slate-800 border border-slate-600 rounded shadow-xl py-1 w-40"
+        >
+          <button 
+            onClick={handleToggleReadStatus}
+            className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white"
+          >
+            {chats.find(c => c.id === contextMenu.chatId)?.unreadBy?.includes(user.id) ? 'Mark as Read' : 'Mark as Unread'}
+          </button>
+        </div>
+      )}
+
       {/* MAIN CHAT AREA */}
       {activeChatId && activeChat ? (
         <div className="flex-1 flex flex-col relative w-full">
-          
-          {/* Top Bar */}
+          {/* Top Bar, Messages, Input... (Same as before) */}
           <div className="h-16 border-b border-slate-700/50 glass-panel flex justify-between items-center px-4 md:px-6 z-10">
             <div className="flex items-center space-x-3 md:space-x-4 overflow-hidden">
                {/* Mobile Menu Button */}

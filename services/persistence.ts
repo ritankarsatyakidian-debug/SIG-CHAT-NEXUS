@@ -1,3 +1,4 @@
+
 import { User, Chat, Message, SigmaxCountry } from '../types';
 import { INITIAL_CONTACTS, ADMIN_CHANNELS } from '../constants';
 
@@ -78,6 +79,13 @@ export const initializeSystem = () => {
     saveDB(STORAGE_KEYS.USERS, db.users);
     saveDB(STORAGE_KEYS.CHATS, db.chats);
   }
+
+  // Session Cleanup: Ensure session ID points to a valid user
+  const currentSessionId = localStorage.getItem(STORAGE_KEYS.SESSION);
+  if (currentSessionId && !db.users[currentSessionId]) {
+    console.warn("Detected invalid session, clearing...");
+    localStorage.removeItem(STORAGE_KEYS.SESSION);
+  }
 };
 
 // --- Auth Services ---
@@ -94,6 +102,14 @@ export const login = (phoneNumber: string, password: string): User | null => {
 
 export const signup = (userData: Omit<User, 'id' | 'isVerified' | 'blockedUserIds'>): User => {
   const db = getDB();
+  
+  if (!userData.phoneNumber || userData.phoneNumber.length < 5) {
+    throw new Error("Invalid Comm Link (Phone Number).");
+  }
+  if (!userData.password || userData.password.length < 4) {
+    throw new Error("Access Key (Password) is too weak.");
+  }
+
   if (Object.values(db.users).some(u => u.phoneNumber === userData.phoneNumber)) {
     throw new Error("Communicator ID already registered.");
   }
@@ -169,6 +185,10 @@ export const verifyUser = (userId: string, reportId: string, matchedIdentity: st
     }
     else if (matchedIdentity === "IBHAN CHAKRABORTY") {
       joinChannel('admin_sir');
+      joinChannel('admin_sigmax');
+    }
+    else if (matchedIdentity === "SAANVI ROY") {
+      // Core member of sigmax channel, admin of admins.sigmax
       joinChannel('admin_sigmax');
     }
   }
@@ -275,6 +295,12 @@ export const sendMessage = (message: Message): void => {
 
   // Update last message
   chat.lastMessage = message;
+  
+  // Mark as read for sender, unread for everyone else
+  // Reset unread status for all participants except sender
+  const recipients = chat.participants.filter(p => p !== message.senderId);
+  chat.unreadBy = recipients;
+  
   saveDB(STORAGE_KEYS.CHATS, db.chats);
 
   networkChannel.postMessage({ type: 'NEW_MESSAGE', payload: message });
@@ -303,6 +329,25 @@ export const addReaction = (chatId: string, messageId: string, userId: string, e
 
   saveDB(STORAGE_KEYS.MESSAGES, db.messages);
   networkChannel.postMessage({ type: 'MESSAGE_UPDATE', payload: msg });
+};
+
+export const toggleChatReadStatus = (chatId: string, userId: string, markAsUnread: boolean) => {
+  const db = getDB();
+  const chat = db.chats[chatId];
+  if (!chat) return;
+
+  if (!chat.unreadBy) chat.unreadBy = [];
+
+  if (markAsUnread) {
+    if (!chat.unreadBy.includes(userId)) {
+      chat.unreadBy.push(userId);
+    }
+  } else {
+    chat.unreadBy = chat.unreadBy.filter(id => id !== userId);
+  }
+
+  saveDB(STORAGE_KEYS.CHATS, db.chats);
+  networkChannel.postMessage({ type: 'CHAT_UPDATE', payload: chat });
 };
 
 export const createPrivateChat = (myId: string, otherPhoneNumber: string): Chat => {
