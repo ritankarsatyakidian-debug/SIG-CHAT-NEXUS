@@ -1,0 +1,7 @@
+{
+  "name": "Sigmax Nexus",
+  "description": "A hyper-advanced, AI-integrated communication platform for the Sigmax alliance nations. Features real-time neural translation, context-aware intelligence, and holographic-style UI.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
