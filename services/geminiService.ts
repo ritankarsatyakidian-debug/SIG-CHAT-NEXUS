@@ -6,7 +6,7 @@ const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 const FAST_MODEL = 'gemini-3-flash-preview';
 const REASONING_MODEL = 'gemini-3-pro-preview';
-const VISION_MODEL = 'gemini-3-pro-preview'; // Using pro for better vision reasoning
+const VISION_MODEL = 'gemini-3-flash-preview'; // Switched to Flash for stable vision+json
 
 export const generatePersonaResponse = async (
   history: Message[],
@@ -21,13 +21,22 @@ export const generatePersonaResponse = async (
 
     const response = await ai.models.generateContent({
       model: FAST_MODEL,
-      contents: `
-        System: ${systemPrompt}
-        Task: Reply to the user. Stay in character. Keep it under 50 words.
-        Conversation History:
-        ${recentHistory}
-        User: ${userMessage}
-      `,
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            {
+              text: `
+                System: ${systemPrompt}
+                Task: Reply to the user. Stay in character. Keep it under 50 words.
+                Conversation History:
+                ${recentHistory}
+                User: ${userMessage}
+              `
+            }
+          ]
+        }
+      ],
     });
     return response.text || "...";
   } catch (error) {
@@ -43,14 +52,23 @@ export const generateSmartReplies = async (
   try {
     const response = await ai.models.generateContent({
       model: FAST_MODEL,
-      contents: `
-        Analyze this incoming message: "${lastMessage}"
-        Context: ${context}
-        Generate 3 distinct reply options for a high-ranking official.
-        1. Casual/Ack
-        2. Professional/Action-oriented
-        3. Diplomatic/Careful
-      `,
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            {
+              text: `
+                Analyze this incoming message: "${lastMessage}"
+                Context: ${context}
+                Generate 3 distinct reply options for a high-ranking official.
+                1. Casual/Ack
+                2. Professional/Action-oriented
+                3. Diplomatic/Careful
+              `
+            }
+          ]
+        }
+      ],
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -86,18 +104,27 @@ export const analyzeConversation = async (messages: Message[]): Promise<Analysis
     
     const response = await ai.models.generateContent({
       model: REASONING_MODEL, // Using Pro for deeper reasoning
-      contents: `
-        Analyze this communication log for Sigmax Command.
-        
-        Transcript:
-        ${transcript}
-        
-        Provide:
-        1. A brief executive summary (max 20 words).
-        2. Extracted actionable items.
-        3. Overall sentiment.
-        4. Threat assessment (LOW/MEDIUM/HIGH).
-      `,
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            {
+              text: `
+                Analyze this communication log for Sigmax Command.
+                
+                Transcript:
+                ${transcript}
+                
+                Provide:
+                1. A brief executive summary (max 20 words).
+                2. Extracted actionable items.
+                3. Overall sentiment.
+                4. Threat assessment (LOW/MEDIUM/HIGH).
+              `
+            }
+          ]
+        }
+      ],
       config: {
         thinkingConfig: { thinkingBudget: 1024 }, // Enable thinking for better analysis
         responseMimeType: "application/json",
@@ -126,7 +153,12 @@ export const translateMessage = async (text: string): Promise<string> => {
   try {
     const response = await ai.models.generateContent({
       model: FAST_MODEL,
-      contents: `Translate the following text to Standard English (Universal Sigmax Dialect). Maintain original tone. Text: "${text}"`
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: `Translate the following text to Standard English (Universal Sigmax Dialect). Maintain original tone. Text: "${text}"` }]
+        }
+      ]
     });
     return response.text || text;
   } catch (e) {
@@ -141,36 +173,46 @@ export const verifyUserIdentity = async (imageBase64: string): Promise<{ identif
 
     const response = await ai.models.generateContent({
       model: VISION_MODEL,
-      contents: {
-        parts: [
-          {
-            inlineData: {
-              mimeType: "image/jpeg",
-              data: cleanBase64
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            {
+              inlineData: {
+                mimeType: "image/jpeg",
+                data: cleanBase64
+              }
+            },
+            {
+              text: `
+                You are a Biometric Security AI for Sigmax Nexus.
+                Analyze the person in this image and determine if they match one of the following high-value targets based on their description:
+
+                1. "SOUMYADEEPTA ROY": Young boy, wearing a red beanie or hat with text on it (like "NY" or similar pattern), looking directly at camera.
+                2. "RITANKAR CHAKRABORTY": Young boy, wearing neon green/lime framed glasses, smiling slightly, short dark hair.
+                3. "SATYAKI HALDER": Young boy, short hair, looking calm, wearing a purple or dark shirt, neutral expression.
+                4. "DIAN DEY": Young boy, wearing dark/black framed glasses, short hair, smiling, possibly wearing a striped shirt.
+                5. "IBHAN CHAKRABORTY": Young boy, short dark hair, wearing a bluish/teal shirt, talking on a yellow phone or hand near face.
+                6. "SAANVI ROY": Young person/girl, dark shoulder-length hair, wearing a purple/dark patterned top, smiling or talking expression, looking slightly to the side or at camera.
+
+                If the image strongly matches one of these descriptions, return the EXACT name from the list. 
+                If it does not match anyone clearly, return "UNKNOWN".
+
+                Response strictly in JSON format: { "identified": boolean, "name": "NAME_OR_UNKNOWN" }
+              `
             }
-          },
-          {
-            text: `
-            You are a Biometric Security AI for Sigmax Nexus.
-            Analyze the person in this image and determine if they match one of the following high-value targets based on their description:
-
-            1. "SOUMYADEEPTA ROY": Young boy, wearing a red beanie or hat with text on it (like "NY" or similar pattern), looking directly at camera.
-            2. "RITANKAR CHAKRABORTY": Young boy, wearing neon green/lime framed glasses, smiling slightly, short dark hair.
-            3. "SATYAKI HALDER": Young boy, short hair, looking calm, wearing a purple or dark shirt, neutral expression.
-            4. "DIAN DEY": Young boy, wearing dark/black framed glasses, short hair, smiling, possibly wearing a striped shirt.
-            5. "IBHAN CHAKRABORTY": Young boy, short dark hair, wearing a bluish/teal shirt, talking on a yellow phone or hand near face.
-            6. "SAANVI ROY": Young person/girl, dark shoulder-length hair, wearing a purple/dark patterned top, smiling or talking expression, looking slightly to the side or at camera.
-
-            If the image strongly matches one of these descriptions, return the EXACT name from the list. 
-            If it does not match anyone clearly, return "UNKNOWN".
-
-            Response strictly in JSON format: { "identified": boolean, "name": "NAME_OR_UNKNOWN" }
-          `
-          }
-        ]
-      },
+          ]
+        }
+      ],
       config: {
-        responseMimeType: "application/json"
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+             identified: { type: Type.BOOLEAN },
+             name: { type: Type.STRING }
+          }
+        }
       }
     });
 
